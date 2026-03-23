@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "refine",
-      "source": ".",
+      "source": "./plugin",
       "description": "ASR-aware text refinement and pronunciation coaching for non-native English speakers",
       "version": "1.0.0",
       "category": "productivity",
