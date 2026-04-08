@@ -10,7 +10,7 @@ argument-hint: "<raw text with potential ASR errors>"
 
 # Refine and Ask
 
-Correct ASR and accent errors in user input, then execute the refined text as a Claude Code request immediately.
+Correct ASR, accent, grammar, and style errors in user input, then execute the refined text as a Claude Code request immediately.
 
 ## Process
 
@@ -27,45 +27,96 @@ Session context resolves most ambiguity. For example, "carrot code" in a Claude 
 
 ### Step 2: Refine the Text
 
-Apply corrections preserving the speaker's original intent:
+Apply corrections preserving the speaker's original intent. Categorize every correction into one of the categories below — this is critical for `/refine:summary` analysis.
 
-**A. Phoneme confusion (accent-aware):**
+**A. Phoneme confusion (accent-aware) — category: `pronunciation`**
 
-| Confusion | Examples | Accents |
-|-----------|----------|---------|
-| v/b | "bery"="very", "bian"="vain" | Spanish, South Asian |
-| l/r | "light"/"right", "craw"="claw" | East Asian |
-| th/s/z | "ze"="the", "sink"="think" | Most non-native |
-| p/f | "pood"="food", "pix"="fix" | South Asian, Arabic |
-| w/v | "wery"="very", "vest"="west" | Slavic, South Asian |
-| n/ng | "sin"="sing", "ban"="bang" | East Asian |
+| Confusion | Subcategory | Examples | Common L1 |
+|-----------|-------------|----------|-----------|
+| v/b | `v_b` | "bery"="very", "bian"="vain" | Spanish, South Asian, Japanese |
+| l/r | `l_r` | "light"/"right", "craw"="claw" | Chinese, Japanese, Korean |
+| th/s/z | `th_s` | "ze"="the", "sink"="think" | Most non-native |
+| p/f | `p_f` | "pood"="food", "pix"="fix" | South Asian, Arabic, Korean |
+| w/v | `w_v` | "wery"="very", "vest"="west" | Slavic, South Asian |
+| n/ng | `n_ng` | "sin"="sing", "ban"="bang" | East Asian |
+| vowel length | `vowel` | "ship"/"sheep", "bit"/"beat" | Chinese, Japanese, Spanish |
 
-**B. Word-level corrections:**
+**B. Grammar errors — category: `grammar`**
+
+| Pattern | Subcategory | Examples |
+|---------|-------------|----------|
+| Missing article | `missing_article` | "I need file" → "I need a file" |
+| Wrong article | `wrong_article` | "I saw a moon" → "I saw the moon" |
+| Unnecessary article | `extra_article` | "The life is beautiful" → "Life is beautiful" |
+| Wrong preposition | `wrong_preposition` | "depend of" → "depend on" |
+| Missing preposition | `missing_preposition` | "listen the music" → "listen to the music" |
+| Subject-verb agreement | `sv_agreement` | "it don't work" → "it doesn't work" |
+| Tense error | `tense` | "I have seen it yesterday" → "I saw it yesterday" |
+| Word order | `word_order` | "always I go" → "I always go" |
+| Plural/singular | `plural` | "many informations" → "much information" |
+
+**C. Collocation errors — category: `collocation`**
+
+| Pattern | Subcategory | Examples |
+|---------|-------------|----------|
+| Verb + noun | `verb_noun` | "do a mistake" → "make a mistake" |
+| Adj + noun | `adj_noun` | "strong rain" → "heavy rain" |
+| Verb + preposition | `verb_prep` | "consist in" → "consist of" |
+| Wrong intensifier | `intensifier` | "I very like" → "I really like" |
+
+**D. Word-level corrections — category: `word_boundary`**
 - Homophones via context (there/their/they're, to/too/two, its/it's)
 - Word boundaries: "alot"="a lot", "to gether"="together"
-- ASR hallucinations: remove phantom phrases, repeated fragments
 - Number confusion: "fifteen"/"fifty" — use context
 - Contractions: "could of"="could have"
+
+**E. ASR artifacts — category: `asr`**
+- Remove phantom phrases, repeated fragments
 - Filler removal: strip meaningless "uh", "um", "like", "you know"
+- ASR hallucinations: "carrot code"="Claude Code"
 
-**C. Grammar:** Fix agreement, tense, missing articles, prepositions.
+**F. Preserve absolutely:** Technical terms, CLI commands, code snippets, proper nouns, domain jargon, original intent.
 
-**D. Preserve absolutely:** Technical terms, CLI commands, code snippets, proper nouns, domain jargon, original intent.
-
-**E. Programming context:**
+**G. Programming context:**
 - "rost"/"rust" = "Rust", "pie thon" = "Python", "no JS" = "Node.js"
 - "get hub" = "GitHub", "docker"/"taker" = "Docker"
 - "claw"/"crowd"/"carrot code" = "Claude Code", "re-act" = "React"
 
 ### Step 3: Log the Refinement
 
-After refining, append a JSONL entry to the history log so `/refine:summary` can analyze patterns later:
+After refining, append a structured JSONL entry to the history log. Each correction MUST include its category and subcategory so `/refine:summary` can generate accurate charts and coaching.
 
-```bash
-printf '%s\n' '{"ts":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","original":"ORIGINAL_TEXT","refined":"REFINED_TEXT","corrections":"CORRECTIONS_LIST"}' >> ~/.claude/refine-history.jsonl
+Build a JSON object with this structure and append it:
+
+```
+{
+  "ts": "<ISO 8601 UTC timestamp>",
+  "original": "<original text>",
+  "refined": "<refined text>",
+  "corrections": [
+    {
+      "from": "<original word/phrase>",
+      "to": "<corrected word/phrase>",
+      "category": "<pronunciation|grammar|collocation|word_boundary|asr>",
+      "subcategory": "<specific subcategory from tables above>"
+    }
+  ]
+}
 ```
 
-Replace ORIGINAL_TEXT, REFINED_TEXT, and CORRECTIONS_LIST with the actual values. Escape any double quotes in the text with backslash. If the file does not exist yet, the append creates it.
+Use a bash command to append the single-line JSON to the log file:
+
+```bash
+printf '%s\n' '<SINGLE_LINE_JSON>' >> ~/.claude/refine-history.jsonl
+```
+
+**IMPORTANT:**
+- The corrections field MUST be a JSON array of objects, not a plain string. Each correction object must have `from`, `to`, `category`, and `subcategory` fields.
+- Escape all double quotes inside string values with backslash.
+- If text contains single quotes (e.g., "don't", "it's"), use a heredoc or `$'...'` quoting to avoid shell escaping issues. Example: `printf '%s\n' "$json_line" >> ~/.claude/refine-history.jsonl` where `json_line` is constructed with proper escaping.
+- Keep the entire JSON on a single line.
+
+If no corrections were needed, still log the entry with an empty corrections array.
 
 ### Step 4: Show Refinement and Execute Immediately
 

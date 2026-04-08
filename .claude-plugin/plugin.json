@@ -1,7 +1,7 @@
 {
   "name": "refine",
-  "version": "1.0.0",
-  "description": "ASR-aware text refinement for non-native English speakers. Corrects accent and speech-to-text errors, then executes the refined request in Claude Code. Includes pronunciation coaching with pattern analysis.",
+  "version": "2.0.0",
+  "description": "ASR-aware text refinement and English coaching for non-native speakers. Corrects pronunciation, grammar, collocations, and syntax errors. Quick text summaries by default, full interactive HTML dashboard with --html flag.",
   "author": {
     "name": "Xi Cao"
   },
@@ -11,8 +11,12 @@
     "speech-to-text",
     "accent",
     "pronunciation",
+    "grammar",
+    "collocation",
     "esl",
     "refinement",
-    "voice"
+    "voice",
+    "coaching",
+    "dashboard"
   ]
 }

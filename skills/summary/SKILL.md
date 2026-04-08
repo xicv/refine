@@ -3,161 +3,177 @@ name: summary
 description: >
   Use when user wants to review their speech/typing patterns, get pronunciation
   coaching, or improve their English clarity. Analyzes refinement history from
-  /refine:ask to identify recurring errors, phoneme confusion trends, and provides
-  personalized ESL coaching with minimal pairs, practice drills, and improvement tips.
+  /refine:ask to identify recurring errors across pronunciation, grammar,
+  collocations, and word boundaries. Default: quick text summary. Pass --html
+  for a full interactive dashboard.
+argument-hint: "[--html]"
 ---
 
-# Refine Summary — English Pronunciation Coach
+# Refine Summary — English Language Coach
 
-Analyze the user's refinement history and provide personalized coaching to improve spoken English clarity.
+Analyze the user's refinement history and show a coaching summary.
 
-## Process
+**Mode:** Check `$ARGUMENTS` for `--html`.
+- If `--html` is present → generate the full HTML dashboard (Step 4B)
+- Otherwise → show a text summary in the terminal (Step 4A, default)
 
-### Step 1: Load History
-
-Read the refinement log:
+## Step 1: Load History
 
 ```bash
 cat ~/.claude/refine-history.jsonl 2>/dev/null || echo "NO_HISTORY"
 ```
 
-If NO_HISTORY or empty, tell the user:
+If NO_HISTORY or empty:
 
 > No refinement history yet. Use `/refine:ask <your text>` a few times first — each use is logged automatically. Come back after 5-10 uses for meaningful patterns.
 
 Then stop.
 
-### Step 2: Analyze Patterns
+## Step 2: Parse and Normalize
 
-Parse all entries and identify:
+Parse all JSONL entries. Handle both formats:
 
-**A. Frequency analysis:**
-- Which specific words were corrected most often?
-- Which phoneme confusion category (v/b, l/r, th/s, etc.) appears most?
-- Which grammar patterns repeat (missing articles, wrong prepositions)?
+- **New format:** `corrections` is an array of `{from, to, category, subcategory}` objects
+- **Legacy format:** `corrections` is a plain string like `"bery→very, balidation→validation"` — infer categories from patterns
 
-**B. Trend analysis:**
-- Are certain errors decreasing over time? (improving)
-- Are certain errors persistent? (need focused practice)
-- Any new error types appearing recently?
+For legacy entries, classify each correction:
+- **pronunciation**: phoneme confusions (crowd→cloud, bonding→binding, Mac→Map, v/b, l/r, th/s swaps)
+- **grammar**: articles, tenses, prepositions, agreement, word form, word order
+- **collocation**: wrong word combinations (memory→history, do a mistake→make a mistake)
+- **word_boundary**: compounds split/joined wrong (lockout→logout, POSTMAP→POST map)
+- **asr**: severe garbles where ASR hallucinated entirely different words (barrack chicken→Bearer token, cryo petrophysics→Cloud API)
 
-**C. Categorize errors by type:**
+## Step 3: Analyze Patterns
 
-| Category | Example | Count |
-|----------|---------|-------|
-| Phoneme: v/b | "bery"→"very" | N |
-| Phoneme: l/r | "craw"→"claw" | N |
-| Word boundary | "alot"→"a lot" | N |
-| ASR artifact | "carrot code"→"Claude Code" | N |
-| Grammar | missing article | N |
-| Filler words | "um", "like" | N |
+Compute:
 
-### Step 3: Generate Coaching Report
+**A. Metrics:** total sessions, date range, total corrections, consecutive-day streak, avg corrections/session
 
-Present as a professional English coach. Be encouraging but specific.
+**B. Category counts:** pronunciation, grammar, collocation, word_boundary, asr
 
-**Report structure:**
+**C. Top subcategories** by frequency (top 8)
+
+**D. Trends:** Compare first half vs second half → classify each category as improving/persistent/worsening
+
+**E. Top repeated corrections** (most frequent from→to pairs)
+
+## Step 4A: Text Summary (default)
+
+Output this directly in the terminal — no files, no HTML:
 
 ```
-=== Your Speaking Progress ===
+══════════════════════════════════════
+  English Coaching Summary
+  {first_date} → {last_date}
+══════════════════════════════════════
 
-Sessions analyzed: N (from DATE to DATE)
-Total corrections: N
+Sessions: {N}  |  Corrections: {N}  |  Streak: {N} days  |  Avg: {N.N}/session
 
---- Top Patterns ---
+── Category Breakdown ──────────────────
 
-1. [Most frequent error category]
-   Frequency: N times
-   Examples from your speech: "X"→"Y", "A"→"B"
-   Trend: [improving / persistent / new]
+  {icon} Pronunciation   {count}  {bar}  {pct}%  {trend_arrow}
+  {icon} Grammar         {count}  {bar}  {pct}%  {trend_arrow}
+  {icon} Word Boundary   {count}  {bar}  {pct}%  {trend_arrow}
+  {icon} Collocations    {count}  {bar}  {pct}%  {trend_arrow}
+  {icon} ASR Artifacts   {count}  {bar}  {pct}%  (tool noise)
 
-2. [Second most frequent]
-   ...
+── Top Error Patterns ──────────────────
 
-3. [Third most frequent]
-   ...
+  1. {from}→{to}  ×{count}  [{category}]
+  2. {from}→{to}  ×{count}  [{category}]
+  3. {from}→{to}  ×{count}  [{category}]
+  4. {from}→{to}  ×{count}  [{category}]
+  5. {from}→{to}  ×{count}  [{category}]
 
---- Practice Recommendations ---
+── Coaching Tips ───────────────────────
 
-[Tailored to their specific patterns — see coaching sections below]
+  Based on your #1 pattern ({top_pattern}):
 
---- Quick Wins ---
+  {2-3 lines of specific, actionable coaching advice}
+  {minimal pair examples if pronunciation}
+  {grammar rule if grammar}
 
-[1-2 things they could fix immediately with awareness alone]
+── Quick Wins ──────────────────────────
+
+  • {one specific micro-drill for their top issue}
+  • {one resource link relevant to their top issue}
+  • Keep using /refine:ask — tracking is the first step
+
+══════════════════════════════════════
+  Run /refine:summary --html for the full interactive dashboard
+══════════════════════════════════════
 ```
 
-### Step 4: Targeted Coaching
+**Formatting rules:**
+- Use Unicode box-drawing characters for structure
+- `{bar}` = inline bar using `█` and `░` characters, 20 chars wide, proportional to category count
+- `{trend_arrow}` = `↑ improving` (green), `→ persistent` (yellow), `↓ worsening` (red)
+- `{icon}` = category icon: pronunciation=🗣, grammar=📝, word_boundary=🔗, collocation=🧩, asr=🤖
+- Keep total output under 40 lines
+- ASR artifacts: note they reflect tool noise, not the user's actual errors — exclude from coaching
 
-Based on the top error patterns, provide coaching from the relevant sections:
+**Tone:** Warm, encouraging. Frame errors as growth opportunities. Celebrate improvements.
 
-**For phoneme confusion (v/b, l/r, th/s, etc.):**
+Then stop. Do NOT generate HTML in this mode.
 
-Explain the mouth position difference simply:
-- **/v/ vs /b/**: "For /v/, top teeth touch lower lip. For /b/, both lips press together. Try: vest-best, very-berry, vine-bine."
-- **/l/ vs /r/**: "For /l/, tongue tip touches the ridge behind your upper teeth. For /r/, tongue curls back without touching anything. Try: light-right, lock-rock, fly-fry."
-- **/θ/ (th) vs /s/**: "For /th/, tongue tip goes between your teeth. For /s/, tongue stays behind teeth. Try: think-sink, thick-sick, path-pass."
+## Step 4B: HTML Dashboard (--html flag)
 
-Provide **minimal pairs** specific to their errors:
-- 5-6 pairs for their most confused phoneme
-- Include pairs using tech vocabulary they actually use
+Generate a complete, self-contained HTML file at `/tmp/refine-report.html` and open it.
 
-**For grammar patterns:**
+The HTML must include Chart.js via CDN, embedded CSS, embedded data as JavaScript, responsive design.
 
-Provide the rule briefly with examples from their actual corrections:
-- Missing articles: "In English, countable singular nouns need 'a' or 'the'. You said 'I need file' — try 'I need a file' or 'I need the file'."
-- Prepositions: Show the correct pattern with their actual words.
+### HTML Sections
 
-**For word boundaries / ASR issues:**
+**1. Header** — Title "English Coaching Dashboard", date range subtitle, gradient background (blue→indigo)
 
-These are often ASR problems, not speaking problems. Note which are ASR artifacts vs actual pronunciation issues. Only coach on actual pronunciation.
+**2. Metric Cards** (4-card grid) — Sessions, Corrections, Streak, Most improved category
 
-### Step 5: Practice Exercises
+**3. Charts** (2×2 grid):
 
-Generate 2-3 exercises tailored to their top error patterns:
+| Chart | Type | Details |
+|-------|------|---------|
+| Corrections Over Time | Line | X=dates, Y=count per session. Lines per category + total. Colors: pronunciation=#ef4444, grammar=#f59e0b, collocation=#8b5cf6, word_boundary=#3b82f6, asr=#6b7280, total=#475569. tension: 0.3 |
+| Error Profile | Radar | 5 axes for categories, semi-transparent blue fill |
+| Error Distribution | Doughnut | Segments per category with %, legend on right |
+| Top Error Patterns | Horizontal bar | Top 8 subcategories, colored by parent category |
 
-**Minimal Pair Drill (for phoneme issues):**
+Chart.js settings: `responsive: true`, `maintainAspectRatio: false`, containers `height: 300px`, legend at bottom for line, right for doughnut.
+
+**4. Pronunciation Coaching** (if pronunciation errors exist) — For each phoneme confusion:
+- Phoneme pair heading with IPA (e.g., "/aʊ/ vs /aː/" for crowd/cloud)
+- Mouth position guide (1-2 sentences each sound)
+- Minimal pairs table (6-8 pairs, include tech terms)
+- Practice tip + reference links (Rachel's English, Forvo, YouGlish, Sounds of Speech Iowa)
+
+**5. Grammar Coaching** (if grammar errors exist) — For each pattern:
+- Rule heading + explanation
+- User's actual before/after examples (2-3)
+- Mnemonic + 3-4 fill-in-the-blank exercises
+- Reference links (Grammarly, Cambridge Grammar, BBC Learning English)
+
+**6. Word Boundary Coaching** (if word_boundary errors exist) — Homophones table, compound word rules, user's examples, quick tests
+
+**7. ASR Note** — Brief note that ASR errors reflect tool limitations, not speech. Exclude from coaching.
+
+**8. Practice Resources** — Curated list: pronunciation drills, grammar checklist, shadowing exercises, general tips
+
+**9. Footer** — Generation date, encouragement, "keep using /refine:ask"
+
+### CSS
+
 ```
-Say each pair aloud, exaggerating the difference:
-1. very / berry      — "The VERY first BERRY"
-2. vest / best       — "That VEST is the BEST"
-3. vote / boat       — "I VOTE for the BOAT"
-4. vow / bow         — "Take a VOW, then BOW"
+pronunciation: #ef4444    grammar: #f59e0b    collocation: #8b5cf6
+word_boundary: #3b82f6    asr: #6b7280       improving: #10b981
+```
+Cards: shadow + 12px radius. Font: `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`. IPA: `'Lucida Sans Unicode', 'DejaVu Sans', Arial`. Responsive grid, print-friendly.
 
-Tech vocabulary practice:
-- "Check the VERSION control" (not "bersion")
-- "Run the VALIDATION suite" (not "balidation")
-- "Fix the VULNERABILITY" (not "bulnerability")
+### Write and Open
+
+```bash
+cat > /tmp/refine-report.html << 'HTMLEOF'
+<!-- full HTML here -->
+HTMLEOF
+open /tmp/refine-report.html
 ```
 
-**Shadowing Exercise (for rhythm/flow):**
-```
-Pick a 30-second clip from a tech talk or podcast.
-Listen once, then repeat along with the speaker.
-Focus on matching their rhythm, not individual words.
-
-Good sources:
-- Conference talks (PyCon, JSConf)
-- Tech podcasts at 0.75x speed
-- YouTube coding tutorials
-```
-
-**Idle Time Micro-Drill (during builds/deploys):**
-```
-While waiting for your build:
-1. Pick one minimal pair from above
-2. Say it 5 times, alternating: "very, berry, very, berry, very"
-3. Then use each in a sentence
-4. Total time: ~30 seconds
-
-Consistency beats intensity — 30 seconds during every build
-adds up to real improvement over weeks.
-```
-
-### Step 6: Encouragement and Next Steps
-
-End with:
-- Acknowledge what they're doing well (errors that decreased)
-- One specific thing to focus on this week
-- Reminder that `/refine:ask` keeps logging, so next `/refine:summary` will show progress
-
-**Tone:** Warm, encouraging, specific. Like a coach who genuinely wants them to succeed — not a grammar pedant. Celebrate progress. Frame errors as opportunities, not failures.
+Then show the same text summary from Step 4A as well (so the terminal isn't empty).

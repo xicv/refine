@@ -7,8 +7,8 @@
     {
       "name": "refine",
       "source": "./",
-      "description": "ASR-aware text refinement and pronunciation coaching for non-native English speakers",
-      "version": "1.0.0",
+      "description": "ASR-aware text refinement and English coaching — quick text summary or full HTML dashboard",
+      "version": "2.0.0",
       "category": "productivity",
       "author": {
         "name": "Xi Cao"
